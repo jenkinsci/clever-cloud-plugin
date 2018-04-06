@@ -24,10 +24,14 @@
 
 package io.jenkins.plugins.clever;
 
+import hudson.Extension;
 import hudson.model.Computer;
+import hudson.model.Descriptor;
 import hudson.model.Label;
 import hudson.slaves.AbstractCloudImpl;
+import hudson.slaves.Cloud;
 import hudson.slaves.NodeProvisioner;
+import hudson.util.Secret;
 import jenkins.model.Jenkins;
 import org.kohsuke.stapler.DataBoundConstructor;
 
@@ -37,17 +41,37 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Crazy class name
+ *
  * @author <a href="mailto:nicolas.deloof@gmail.com">Nicolas De Loof</a>
  */
 public class CleverCloudCloud extends AbstractCloudImpl {
 
+
+    private final String token;
+
+    private final Secret secret;
+
     private final List<AgentTemplate> templates;
 
     @DataBoundConstructor
-    public CleverCloudCloud(String name, String instanceCapStr, List<AgentTemplate> templates) {
-        super(name, instanceCapStr);
+    public CleverCloudCloud(String name, String token, Secret secret, List<AgentTemplate> templates) {
+        super(name, "10");
+        this.token = token;
+        this.secret = secret;
         this.templates = templates;
+    }
+
+
+    public String getToken() {
+        return token;
+    }
+
+    public Secret getSecret() {
+        return secret;
+    }
+
+    public List<AgentTemplate> getTemplates() {
+        return templates;
     }
 
     @Override
@@ -62,13 +86,13 @@ public class CleverCloudCloud extends AbstractCloudImpl {
             return Collections.emptyList();
         }
 
-        final List<PlannedAgent> r = new ArrayList<>();
+        final List<PlannedNode> r = new ArrayList<>();
 
         for (int i = 0; i < excessWorkload; i++) {
-            r.add(new PlannedAgent(label, template));
+            r.add(new PlannedNode(label, template));
         }
 
-        for (PlannedAgent plannedNode : r) {
+        for (PlannedNode plannedNode : r) {
             Computer.threadPoolForRemoting.submit(() -> {
                 try {
                     CleverCloudAgent agent = _provision(label, template);
@@ -82,12 +106,11 @@ public class CleverCloudCloud extends AbstractCloudImpl {
         return new ArrayList<NodeProvisioner.PlannedNode>(r);
     }
 
-    private CleverCloudAgent _provision(Label label, AgentTemplate template) {
-        return null;
-    }
-
-    public List<AgentTemplate> getTemplates() {
-        return templates;
+    /**
+     * Provision a new Node on Clever-Cloud.
+     */
+    private CleverCloudAgent _provision(Label label, AgentTemplate template) throws Exception {
+        return null;      // TODO
     }
 
     @Override
@@ -101,5 +124,14 @@ public class CleverCloudCloud extends AbstractCloudImpl {
             if (template.matches(label)) return template;
         }
         return null;
+    }
+
+    @Extension
+    public static class DescriptorImpl extends Descriptor<Cloud> {
+
+        @Override
+        public String getDisplayName() {
+            return "Clever Cloud";
+        }
     }
 }
