@@ -28,6 +28,8 @@ import com.cloudbees.jenkins.plugins.sshcredentials.SSHUserPrivateKey;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
+import com.squareup.okhttp.Interceptor;
+import com.squareup.okhttp.logging.HttpLoggingInterceptor;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.model.Computer;
@@ -43,9 +45,10 @@ import hudson.slaves.NodeProvisioner;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
 import io.jenkins.plugins.clever.api.Application;
+import io.jenkins.plugins.clever.api.ApplicationsApi;
+import io.jenkins.plugins.clever.api.Instance;
+import io.jenkins.plugins.clever.api.ProductsApi;
 import io.jenkins.plugins.clever.api.WannabeApplication;
-import io.jenkins.plugins.clever.api.WannabeEnv;
-import io.swagger.client.api.ApplicationsApi;
 import jenkins.model.Jenkins;
 import jenkins.model.JenkinsLocationConfiguration;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
@@ -56,13 +59,20 @@ import org.jenkinsci.plugins.gitclient.GitClient;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import se.akerfeldt.okhttp.signpost.OkHttpOAuthConsumer;
+import se.akerfeldt.okhttp.signpost.SigningInterceptor;
 
 import java.io.File;
+import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -71,6 +81,11 @@ import java.util.UUID;
  */
 public class CleverCloudCloud extends AbstractCloudImpl {
 
+
+    // we use the same consumer key as clever CLI
+    // https://github.com/CleverCloud/clever-tools/blob/master/src/models/configuration.js
+    private final String CONSUMER_KEY = "T5nFjKeHH4AIlEveuGhB5S3xg8T19e";
+    private final String CONSUMER_SECRET = "MgVMqTr6fWlf2M0tkC2MXOnhfqBWDT";
 
     private final String token;
 
@@ -144,9 +159,34 @@ public class CleverCloudCloud extends AbstractCloudImpl {
      */
     private CleverCloudAgent _provision(Label label, AgentTemplate template) throws Exception {
 
+        final JenkinsLocationConfiguration locationConfiguration = JenkinsLocationConfiguration.get();
+        if (locationConfiguration == null) throw new IOException("Jenkins URL not set");
+
         final String agentName = UUID.randomUUID().toString();
 
-        final ApplicationsApi api = new ApplicationsApi();
+        final ApiClient c = new ApiClient();
+        OkHttpOAuthConsumer consumer = new OkHttpOAuthConsumer(CONSUMER_KEY, CONSUMER_SECRET);
+        consumer.setTokenWithSecret(token, Secret.toString(secret));
+
+        final List<Interceptor> interceptors = c.getHttpClient().interceptors();
+        interceptors.add(new SigningInterceptor(consumer));
+        final HttpLoggingInterceptor logging = new HttpLoggingInterceptor(new HttpLoggingInterceptor.Logger() {
+            @Override public void log(String message) {
+                System.out.println(message);
+            }
+        });
+        logging.setLevel(HttpLoggingInterceptor.Level.BODY);
+        interceptors.add(logging);
+
+        final ApplicationsApi api = new ApplicationsApi(c);
+        final ProductsApi products = new ProductsApi(c);
+
+        final Optional<Instance> docker = products.getProductsInstances("").stream()
+                .filter((it) -> it.isEnabled() && it.getType().equals("docker"))
+                .findFirst();
+
+        if (!docker.isPresent()) throw new IOException("No 'docker' instance available");
+        final Instance instance = docker.get();
 
         WannabeApplication app = new WannabeApplication();
         app.setName("Jenkins agent "+ agentName);
@@ -154,19 +194,32 @@ public class CleverCloudCloud extends AbstractCloudImpl {
         app.setMaxInstances(1);
         app.setShutdownable(true);
         app.setSeparateBuild(false);
-        app.setInstanceType("XS");
+        app.setInstanceType(instance.getType());
+        app.setInstanceVariant(instance.getVariant().getId());
+        app.setInstanceVersion(instance.getVersion());
+        app.setMinFlavor("XS"); // Use flavor as jenkins label ?
+        app.setMaxFlavor("XS");
+        app.setZone("par"); // TODO
+        app.setDeploy("git"); // TODO waiting for a binary deploy API so we can just deploy 'jenkins/jnlp-slave' without a fake Dockerfile"
 
         String organisationId = "orga_3fab752b-3231-41b5-8b17-029e4689ba39";
         Application application = api.postOrganisationsIdApplications(organisationId, app);
 
+        Map<String, String> env = new HashMap<>();
+        env.put("JENKINS_URL",locationConfiguration.getUrl());
+        env.put("JENKINS_AGENT_NAME", agentName);
+        env.put("JENKINS_SECRET", JnlpSlaveAgentProtocol.SLAVE_SECRET.mac(agentName));
 
-        api.putOrganisationsIdApplicationsAppIdEnv(organisationId, application.getId(),
-                new WannabeEnv().name("JENKINS_URL").value(JenkinsLocationConfiguration.get().getUrl()));
-        api.putOrganisationsIdApplicationsAppIdEnv(organisationId, application.getId(),
-                new WannabeEnv().name("JENKINS_AGENT_NAME").value(agentName));
-        api.putOrganisationsIdApplicationsAppIdEnv(organisationId, application.getId(),
-                new WannabeEnv().name("JENKINS_SECRET").value(JnlpSlaveAgentProtocol.SLAVE_SECRET.mac(agentName)));
+        api.putOrganisationsIdApplicationsAppIdEnv(organisationId, application.getId(), env);
 
+        dockerRun(application, "jenkins/jnlp-slave");
+
+        // TODO wait
+
+        return null;      // TODO
+    }
+
+    private void dockerRun(Application application, String dockerImage) throws IOException, InterruptedException, URISyntaxException {
         final File tmp = Files.createTempDirectory("clever").toFile();
         final GitClient git = Git.with(TaskListener.NULL, new EnvVars(
                 "GIT_AUTHOR_NAME=jenkin",
@@ -174,19 +227,16 @@ public class CleverCloudCloud extends AbstractCloudImpl {
                 "GIT_COMMITTER_NAME=jenkin",
                 "GIT_COMMITTER_EMAIL=jenkins@dev.null"
         )).in(tmp).using("jgit").getClient();
+        git.init();
 
         // Unfortunately we can't (yet) rely on a binary deployment API to just run jenkins/jnlp-slave
-        FileUtils.writeStringToFile(new File(tmp, "Dockerfile"), "FROM jenkins/jnlp-slave");
+        FileUtils.writeStringToFile(new File(tmp, "Dockerfile"), "FROM "+dockerImage);
         git.add("Dockerfile");
         git.commit("Deploy jenkins agent on clever cloud");
 
         final String remote = application.getDeployUrl();
         git.addCredentials(remote, getGitSSHCredentials());
         git.push().to(new URIish(remote)).execute();
-
-        // TODO wait
-
-        return null;      // TODO
     }
 
     @Override
