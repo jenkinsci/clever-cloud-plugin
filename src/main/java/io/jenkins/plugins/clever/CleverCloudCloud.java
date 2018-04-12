@@ -36,11 +36,14 @@ import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
 import hudson.model.Label;
+import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
 import hudson.slaves.AbstractCloudImpl;
 import hudson.slaves.Cloud;
+import hudson.slaves.CloudSlaveRetentionStrategy;
+import hudson.slaves.JNLPLauncher;
 import hudson.slaves.NodeProvisioner;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
@@ -73,7 +76,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  *
@@ -154,6 +159,9 @@ public class CleverCloudCloud extends AbstractCloudImpl {
         return new ArrayList<NodeProvisioner.PlannedNode>(r);
     }
 
+    private static final String organisationId = "orga_3fab752b-3231-41b5-8b17-029e4689ba39";
+
+
     /**
      * Provision a new Node on Clever-Cloud.
      */
@@ -164,20 +172,7 @@ public class CleverCloudCloud extends AbstractCloudImpl {
 
         final String agentName = UUID.randomUUID().toString();
 
-        final ApiClient c = new ApiClient();
-        OkHttpOAuthConsumer consumer = new OkHttpOAuthConsumer(CONSUMER_KEY, CONSUMER_SECRET);
-        consumer.setTokenWithSecret(token, Secret.toString(secret));
-
-        final List<Interceptor> interceptors = c.getHttpClient().interceptors();
-        interceptors.add(new SigningInterceptor(consumer));
-        final HttpLoggingInterceptor logging = new HttpLoggingInterceptor(new HttpLoggingInterceptor.Logger() {
-            @Override public void log(String message) {
-                System.out.println(message);
-            }
-        });
-        logging.setLevel(HttpLoggingInterceptor.Level.BODY);
-        interceptors.add(logging);
-
+        final ApiClient c = getApiClient();
         final ApplicationsApi api = new ApplicationsApi(c);
         final ProductsApi products = new ProductsApi(c);
 
@@ -202,7 +197,6 @@ public class CleverCloudCloud extends AbstractCloudImpl {
         app.setZone("par"); // TODO
         app.setDeploy("git"); // TODO waiting for a binary deploy API so we can just deploy 'jenkins/jnlp-slave' without a fake Dockerfile"
 
-        String organisationId = "orga_3fab752b-3231-41b5-8b17-029e4689ba39";
         Application application = api.postOrganisationsIdApplications(organisationId, app);
 
         Map<String, String> env = new HashMap<>();
@@ -214,10 +208,38 @@ public class CleverCloudCloud extends AbstractCloudImpl {
 
         dockerRun(application, "jenkins/jnlp-slave");
 
-        // TODO wait
-
-        return null;      // TODO
+        return new CleverCloudAgent(this.name, agentName, application.getId(), "/home/jenkins", label.toString());
     }
+
+    public void terminate(CleverCloudAgent agent) throws IOException {
+        final ApiClient c = getApiClient();
+        final ApplicationsApi api = new ApplicationsApi(c);
+        final String id = agent.getApplicationId();
+        try {
+            api.deleteOrganisationsIdApplicationsAppId(organisationId, id);
+        } catch (ApiException e) {
+            throw new IOException("Failed to delete Application "+id, e);
+        }
+    }
+
+    private ApiClient getApiClient() {
+        final ApiClient c = new ApiClient();
+        OkHttpOAuthConsumer consumer = new OkHttpOAuthConsumer(CONSUMER_KEY, CONSUMER_SECRET);
+        consumer.setTokenWithSecret(token, Secret.toString(secret));
+
+        final List<Interceptor> interceptors = c.getHttpClient().interceptors();
+        interceptors.add(new SigningInterceptor(consumer));
+        final HttpLoggingInterceptor logging = new HttpLoggingInterceptor(new HttpLoggingInterceptor.Logger() {
+            @Override public void log(String message) {
+                System.out.println(message);
+            }
+        });
+        logging.setLevel(HttpLoggingInterceptor.Level.BODY);
+        interceptors.add(logging);
+        return c;
+    }
+
+
 
     private void dockerRun(Application application, String dockerImage) throws IOException, InterruptedException, URISyntaxException {
         final File tmp = Files.createTempDirectory("clever").toFile();
@@ -258,6 +280,7 @@ public class CleverCloudCloud extends AbstractCloudImpl {
                 CredentialsMatchers.withId(credentialsId)
         );
     }
+
 
     @Extension
     public static class DescriptorImpl extends Descriptor<Cloud> {

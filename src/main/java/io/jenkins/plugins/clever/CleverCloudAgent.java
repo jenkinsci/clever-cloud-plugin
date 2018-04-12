@@ -29,21 +29,42 @@ import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
-import hudson.slaves.ComputerLauncher;
+import hudson.slaves.Cloud;
 import hudson.slaves.EphemeralNode;
-import hudson.slaves.NodeProperty;
+import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
+import jenkins.model.Jenkins;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Collections;
 
 /**
  * @author <a href="mailto:nicolas.deloof@gmail.com">Nicolas De Loof</a>
  */
 public class CleverCloudAgent extends AbstractCloudSlave implements EphemeralNode {
 
-    public CleverCloudAgent(String name, String nodeDescription, String remoteFS, int numExecutors, Mode mode, String labelString, ComputerLauncher launcher, RetentionStrategy retentionStrategy, List<? extends NodeProperty<?>> nodeProperties) throws Descriptor.FormException, IOException {
-        super(name, nodeDescription, remoteFS, numExecutors, mode, labelString, launcher, retentionStrategy, nodeProperties);
+    private final static RetentionStrategy STRATEGY = new CleverCloudAgentRetentionStrategy();
+
+    private final String cloud;
+    private final String applicationId;
+
+    public CleverCloudAgent(String cloud, String name, String applicationId, String remoteFS, String labelString) throws Descriptor.FormException, IOException {
+        super(name, "jenkins agent on clever cloud", remoteFS, 1, Mode.EXCLUSIVE, labelString, new JNLPLauncher(), STRATEGY, Collections.emptyList());
+        this.cloud = cloud;
+        this.applicationId = applicationId;
+    }
+
+    private CleverCloudCloud getCloud() {
+        for (Cloud c : Jenkins.getInstance().clouds) {
+            if (c.name.equals(cloud)) {
+                return (CleverCloudCloud) c;
+            }
+        }
+        throw new IllegalStateException("cloud "+cloud+" does not exists.");
+    }
+
+    public String getApplicationId() {
+        return applicationId;
     }
 
     @Override
@@ -53,7 +74,7 @@ public class CleverCloudAgent extends AbstractCloudSlave implements EphemeralNod
 
     @Override
     protected void _terminate(TaskListener taskListener) throws IOException, InterruptedException {
-
+        getCloud().terminate(this);
     }
 
     @Override
