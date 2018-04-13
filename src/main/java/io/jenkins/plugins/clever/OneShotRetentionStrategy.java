@@ -11,16 +11,13 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
+ * A {@link hudson.slaves.RetentionStrategy} that will remove Node after executor completion.
  * @author <a href="mailto:nicolas.deloof@gmail.com">Nicolas De Loof</a>
  */
-public class CleverCloudAgentRetentionStrategy extends CloudSlaveRetentionStrategy implements ExecutorListener {
+public class OneShotRetentionStrategy extends CloudSlaveRetentionStrategy implements ExecutorListener {
 
-    private static final Logger LOGGER = Logger.getLogger(CleverCloudAgentRetentionStrategy.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(OneShotRetentionStrategy.class.getName());
 
-    @Override
-    public boolean isManualLaunchAllowed(Computer c) {
-        return false;
-    }
 
     @Override
     public void taskAccepted(Executor executor, Queue.Task task) {
@@ -38,7 +35,10 @@ public class CleverCloudAgentRetentionStrategy extends CloudSlaveRetentionStrate
     }
 
     private void done(Executor executor) {
-        final CleverCloudComputer c = (CleverCloudComputer) executor.getOwner();
+        final Computer owner = executor.getOwner();
+        if (!(owner instanceof CleverCloudComputer)) return;
+
+        final CleverCloudComputer c = (CleverCloudComputer) owner;
         Queue.Executable exec = executor.getCurrentExecutable();
         /**
         if (exec instanceof ContinuableExecutable && ((ContinuableExecutable) exec).willContinue()) {

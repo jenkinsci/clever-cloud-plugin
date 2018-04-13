@@ -27,8 +27,11 @@ public class CleverCloudNodeProvisionerStrategy extends NodeProvisioner.Strategy
         final Label label = strategyState.getLabel();
 
         LoadStatistics.LoadStatisticsSnapshot snapshot = strategyState.getSnapshot();
-        int availableCapacity = snapshot.getAvailableExecutors() + snapshot.getConnectingExecutors() +
-                strategyState.getPlannedCapacitySnapshot();
+        int availableCapacity =
+                  snapshot.getAvailableExecutors()   // live executors
+                + snapshot.getConnectingExecutors()  // executors present but not yet connected
+                + strategyState.getPlannedCapacitySnapshot()     // capacity added by previous strategies from previous rounds
+                + strategyState.getAdditionalPlannedCapacity();  // capacity added by previous strategies _this round_
         int currentDemand = snapshot.getQueueLength();
         LOGGER.log(Level.FINE, "Available capacity={0}, currentDemand={1}",
                 new Object[]{availableCapacity, currentDemand});

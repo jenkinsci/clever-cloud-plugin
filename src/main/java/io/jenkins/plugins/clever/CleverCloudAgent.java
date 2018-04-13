@@ -43,7 +43,7 @@ import java.util.Collections;
  */
 public class CleverCloudAgent extends AbstractCloudSlave implements EphemeralNode {
 
-    private final static RetentionStrategy STRATEGY = new CleverCloudAgentRetentionStrategy();
+    private final static RetentionStrategy STRATEGY = new OneShotRetentionStrategy();
 
     private final String cloud;
     private final String applicationId;
@@ -69,7 +69,7 @@ public class CleverCloudAgent extends AbstractCloudSlave implements EphemeralNod
 
     @Override
     public AbstractCloudComputer createComputer() {
-        return null;
+        return new CleverCloudComputer(this);
     }
 
     @Override

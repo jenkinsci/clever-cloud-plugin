@@ -36,14 +36,11 @@ import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
 import hudson.model.Label;
-import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
 import hudson.slaves.AbstractCloudImpl;
 import hudson.slaves.Cloud;
-import hudson.slaves.CloudSlaveRetentionStrategy;
-import hudson.slaves.JNLPLauncher;
 import hudson.slaves.NodeProvisioner;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
@@ -76,9 +73,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  *
@@ -198,17 +193,27 @@ public class CleverCloudCloud extends AbstractCloudImpl {
         app.setDeploy("git"); // TODO waiting for a binary deploy API so we can just deploy 'jenkins/jnlp-slave' without a fake Dockerfile"
 
         Application application = api.postOrganisationsIdApplications(organisationId, app);
+        final CleverCloudAgent agent = new CleverCloudAgent(this.name, agentName, application.getId(), "/home/jenkins", label.toString());
 
-        Map<String, String> env = new HashMap<>();
-        env.put("JENKINS_URL",locationConfiguration.getUrl());
-        env.put("JENKINS_AGENT_NAME", agentName);
-        env.put("JENKINS_SECRET", JnlpSlaveAgentProtocol.SLAVE_SECRET.mac(agentName));
+        // Register agent so it becomes a valid JNLP target
+        Jenkins.getInstance().addNode(agent);
 
-        api.putOrganisationsIdApplicationsAppIdEnv(organisationId, application.getId(), env);
+        try {
+            Map<String, String> env = new HashMap<>();
+            env.put("JENKINS_URL", locationConfiguration.getUrl());
+            env.put("JENKINS_AGENT_NAME", agentName);
+            env.put("JENKINS_SECRET", JnlpSlaveAgentProtocol.SLAVE_SECRET.mac(agentName));
 
-        dockerRun(application, "jenkins/jnlp-slave");
+            api.putOrganisationsIdApplicationsAppIdEnv(organisationId, application.getId(), env);
 
-        return new CleverCloudAgent(this.name, agentName, application.getId(), "/home/jenkins", label.toString());
+            dockerRun(application, "jenkins/jnlp-slave");
+        } catch (IOException e) {
+            // Something went wrong, ensure we remove clever-cloud application
+            api.deleteOrganisationsIdApplicationsAppId(organisationId, application.getId());
+            throw e;
+        }
+
+        return agent;
     }
 
     public void terminate(CleverCloudAgent agent) throws IOException {

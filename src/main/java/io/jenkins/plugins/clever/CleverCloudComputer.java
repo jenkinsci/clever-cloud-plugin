@@ -2,6 +2,7 @@ package io.jenkins.plugins.clever;
 
 import hudson.slaves.AbstractCloudComputer;
 
+import javax.annotation.CheckForNull;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -21,6 +22,16 @@ public class CleverCloudComputer extends AbstractCloudComputer<CleverCloudAgent>
         this.agent = agent;
     }
 
+    public String getApplicationId() {
+        return agent.getApplicationId();
+    }
+
+    @CheckForNull
+    @Override
+    public CleverCloudAgent getNode() {
+        return agent;
+    }
+    
     @Override
     protected void onRemoved() {
         threadPoolForRemoting.submit(() -> {
