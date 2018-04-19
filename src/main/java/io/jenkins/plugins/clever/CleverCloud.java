@@ -79,7 +79,7 @@ import java.util.UUID;
  *
  * @author <a href="mailto:nicolas.deloof@gmail.com">Nicolas De Loof</a>
  */
-public class CleverCloudCloud extends AbstractCloudImpl {
+public class CleverCloud extends AbstractCloudImpl {
 
 
     // we use the same consumer key as clever CLI
@@ -96,7 +96,7 @@ public class CleverCloudCloud extends AbstractCloudImpl {
     private final List<AgentTemplate> templates;
 
     @DataBoundConstructor
-    public CleverCloudCloud(String name, String token, Secret secret, String credentialsId, List<AgentTemplate> templates) {
+    public CleverCloud(String name, String token, Secret secret, String credentialsId, List<AgentTemplate> templates) {
         super(name, "10");
         this.token = token;
         this.secret = secret;
@@ -143,7 +143,7 @@ public class CleverCloudCloud extends AbstractCloudImpl {
         for (PlannedNode plannedNode : r) {
             Computer.threadPoolForRemoting.submit(() -> {
                 try {
-                    CleverCloudAgent agent = _provision(label, template);
+                    CleverAgent agent = _provision(label, template);
                     plannedNode.promise().complete(agent);
                 } catch (Throwable t) {
                     plannedNode.promise().completeExceptionally(t);
@@ -157,10 +157,20 @@ public class CleverCloudCloud extends AbstractCloudImpl {
     private static final String organisationId = "orga_3fab752b-3231-41b5-8b17-029e4689ba39";
 
 
+    // FIXME For development only
+    public Object readResolve() throws ApiException {
+        final ApiClient c = getApiClient();
+        final ApplicationsApi api = new ApplicationsApi(c);
+        for (Application application : api.getOrganisationsIdApplications(organisationId)) {
+            api.deleteOrganisationsIdApplicationsAppId(organisationId, application.getId());
+        }
+        return this;
+    }
+
     /**
      * Provision a new Node on Clever-Cloud.
      */
-    private CleverCloudAgent _provision(Label label, AgentTemplate template) throws Exception {
+    private CleverAgent _provision(Label label, AgentTemplate template) throws Exception {
 
         final JenkinsLocationConfiguration locationConfiguration = JenkinsLocationConfiguration.get();
         if (locationConfiguration == null) throw new IOException("Jenkins URL not set");
@@ -193,7 +203,7 @@ public class CleverCloudCloud extends AbstractCloudImpl {
         app.setDeploy("git"); // TODO waiting for a binary deploy API so we can just deploy 'jenkins/jnlp-slave' without a fake Dockerfile"
 
         Application application = api.postOrganisationsIdApplications(organisationId, app);
-        final CleverCloudAgent agent = new CleverCloudAgent(this.name, agentName, application.getId(), "/home/jenkins", label.toString());
+        final CleverAgent agent = new CleverAgent(this.name, agentName, application.getId(), "/home/jenkins", label.toString());
 
         // Register agent so it becomes a valid JNLP target
         Jenkins.getInstance().addNode(agent);
@@ -216,7 +226,7 @@ public class CleverCloudCloud extends AbstractCloudImpl {
         return agent;
     }
 
-    public void terminate(CleverCloudAgent agent) throws IOException {
+    public void terminate(CleverAgent agent) throws IOException {
         final ApiClient c = getApiClient();
         final ApplicationsApi api = new ApplicationsApi(c);
         final String id = agent.getApplicationId();

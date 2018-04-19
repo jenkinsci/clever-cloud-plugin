@@ -18,9 +18,9 @@ import java.util.logging.Logger;
  * @author <a href="mailto:nicolas.deloof@gmail.com">Nicolas De Loof</a>
  */
 @Extension(ordinal = 100)
-public class CleverCloudNodeProvisionerStrategy extends NodeProvisioner.Strategy {
+public class CleverNodeProvisionerStrategy extends NodeProvisioner.Strategy {
 
-    private static final Logger LOGGER = Logger.getLogger(CleverCloudNodeProvisionerStrategy.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(CleverNodeProvisionerStrategy.class.getName());
 
     @Override
     public NodeProvisioner.StrategyDecision apply(NodeProvisioner.StrategyState strategyState) {

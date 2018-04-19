@@ -10,14 +10,14 @@ import java.util.logging.Logger;
 /**
  * @author <a href="mailto:nicolas.deloof@gmail.com">Nicolas De Loof</a>
  */
-public class CleverCloudComputer extends AbstractCloudComputer<CleverCloudAgent> {
+public class CleverComputer extends AbstractCloudComputer<CleverAgent> {
 
-    private static final Logger LOGGER = Logger.getLogger(CleverCloudComputer.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(CleverComputer.class.getName());
 
     // once created CleverCloudAgent is never reconfigured, so we can keep a reference like this.
-    private final CleverCloudAgent agent;
+    private final CleverAgent agent;
 
-    public CleverCloudComputer(CleverCloudAgent agent) {
+    public CleverComputer(CleverAgent agent) {
         super(agent);
         this.agent = agent;
     }
@@ -28,7 +28,7 @@ public class CleverCloudComputer extends AbstractCloudComputer<CleverCloudAgent>
 
     @CheckForNull
     @Override
-    public CleverCloudAgent getNode() {
+    public CleverAgent getNode() {
         return agent;
     }
     

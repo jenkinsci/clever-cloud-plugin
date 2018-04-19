@@ -41,23 +41,23 @@ import java.util.Collections;
 /**
  * @author <a href="mailto:nicolas.deloof@gmail.com">Nicolas De Loof</a>
  */
-public class CleverCloudAgent extends AbstractCloudSlave implements EphemeralNode {
+public class CleverAgent extends AbstractCloudSlave implements EphemeralNode {
 
     private final static RetentionStrategy STRATEGY = new OneShotRetentionStrategy();
 
     private final String cloud;
     private final String applicationId;
 
-    public CleverCloudAgent(String cloud, String name, String applicationId, String remoteFS, String labelString) throws Descriptor.FormException, IOException {
+    public CleverAgent(String cloud, String name, String applicationId, String remoteFS, String labelString) throws Descriptor.FormException, IOException {
         super(name, "jenkins agent on clever cloud", remoteFS, 1, Mode.EXCLUSIVE, labelString, new JNLPLauncher(), STRATEGY, Collections.emptyList());
         this.cloud = cloud;
         this.applicationId = applicationId;
     }
 
-    private CleverCloudCloud getCloud() {
+    private CleverCloud getCloud() {
         for (Cloud c : Jenkins.getInstance().clouds) {
             if (c.name.equals(cloud)) {
-                return (CleverCloudCloud) c;
+                return (CleverCloud) c;
             }
         }
         throw new IllegalStateException("cloud "+cloud+" does not exists.");
@@ -69,7 +69,7 @@ public class CleverCloudAgent extends AbstractCloudSlave implements EphemeralNod
 
     @Override
     public AbstractCloudComputer createComputer() {
-        return new CleverCloudComputer(this);
+        return new CleverComputer(this);
     }
 
     @Override

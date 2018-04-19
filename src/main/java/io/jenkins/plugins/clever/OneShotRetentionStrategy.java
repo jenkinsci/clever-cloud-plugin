@@ -36,9 +36,9 @@ public class OneShotRetentionStrategy extends CloudSlaveRetentionStrategy implem
 
     private void done(Executor executor) {
         final Computer owner = executor.getOwner();
-        if (!(owner instanceof CleverCloudComputer)) return;
+        if (!(owner instanceof CleverComputer)) return;
 
-        final CleverCloudComputer c = (CleverCloudComputer) owner;
+        final CleverComputer c = (CleverComputer) owner;
         Queue.Executable exec = executor.getCurrentExecutable();
         /**
         if (exec instanceof ContinuableExecutable && ((ContinuableExecutable) exec).willContinue()) {
@@ -50,7 +50,7 @@ public class OneShotRetentionStrategy extends CloudSlaveRetentionStrategy implem
         c.setAcceptingTasks(false); // just in case
         Computer.threadPoolForRemoting.submit(() -> {
             Queue.withLock( () -> {
-                CleverCloudAgent node = c.getNode();
+                CleverAgent node = c.getNode();
                 if (node != null) {
                     try {
                         node.terminate();
