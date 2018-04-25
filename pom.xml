@@ -8,15 +8,16 @@
         <relativePath />
     </parent>
     <groupId>io.jenkins.plugins</groupId>
-    <artifactId>clever-plugin</artifactId>
+    <artifactId>clever-cloud-plugin</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <properties>
         <jenkins.version>2.73.3</jenkins.version>
         <java.level>8</java.level>
     </properties>
-    <name>Clever Cloud Plugin</name>
+    <name>Clever-Cloud Plugin</name>
     <description>Integrate Jenkins with Clever Cloud</description>
+    <url>https://wiki.jenkins.io/display/JENKINS/Clever+Cloud+Plugin</url>
 
     <licenses>
         <license>
