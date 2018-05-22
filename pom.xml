@@ -87,7 +87,6 @@
       </developer>
     </developers> 
 
-    <url>https://wiki.jenkins.io/display/JENKINS/Clever+Cloud+Plugin</url>
     <scm>
         <connection>scm:git:git://github.com/jenkinsci/${project.artifactId}-plugin.git</connection>
         <developerConnection>scm:git:git@github.com:jenkinsci/${project.artifactId}-plugin.git</developerConnection>
