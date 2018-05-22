@@ -8,7 +8,7 @@
         <relativePath />
     </parent>
     <groupId>io.jenkins.plugins</groupId>
-    <artifactId>clever-cloud-plugin</artifactId>
+    <artifactId>clever-cloud</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <properties>
