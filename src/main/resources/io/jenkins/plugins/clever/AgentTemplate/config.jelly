@@ -33,4 +33,12 @@
     <f:textbox />
   </f:entry>
 
+  <f:entry field="dockerImage" title="${%Docker image}" >
+    <f:textbox default="jenkins/jnlp-slave"/>
+  </f:entry>
+
+  <f:entry field="scaler" title="${%Virtual machine size}" >
+    <f:select default="XS"/>
+  </f:entry>
+
 </j:jelly>

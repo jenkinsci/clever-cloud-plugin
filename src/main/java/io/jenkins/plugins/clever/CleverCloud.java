@@ -197,8 +197,8 @@ public class CleverCloud extends AbstractCloudImpl {
         app.setInstanceType(instance.getType());
         app.setInstanceVariant(instance.getVariant().getId());
         app.setInstanceVersion(instance.getVersion());
-        app.setMinFlavor("XS"); // Use flavor as jenkins label ?
-        app.setMaxFlavor("XS");
+        app.setMinFlavor(template.getScaler());
+        app.setMaxFlavor(template.getScaler());
         app.setZone("par"); // TODO
         app.setDeploy("git"); // TODO waiting for a binary deploy API so we can just deploy 'jenkins/jnlp-slave' without a fake Dockerfile"
 
@@ -213,10 +213,11 @@ public class CleverCloud extends AbstractCloudImpl {
             env.put("JENKINS_URL", locationConfiguration.getUrl());
             env.put("JENKINS_AGENT_NAME", agentName);
             env.put("JENKINS_SECRET", JnlpSlaveAgentProtocol.SLAVE_SECRET.mac(agentName));
+            env.put("CC_MOUNT_DOCKER_SOCKET", "true");
 
             api.putOrganisationsIdApplicationsAppIdEnv(organisationId, application.getId(), env);
 
-            dockerRun(application, "jenkins/jnlp-slave");
+            dockerRun(application, template.getDockerImage());
         } catch (IOException e) {
             // Something went wrong, ensure we remove clever-cloud application
             api.deleteOrganisationsIdApplicationsAppId(organisationId, application.getId());
