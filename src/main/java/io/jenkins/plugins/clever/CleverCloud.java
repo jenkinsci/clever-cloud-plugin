@@ -24,7 +24,6 @@
 
 package io.jenkins.plugins.clever;
 
-import com.cloudbees.jenkins.plugins.sshcredentials.SSHUserPrivateKey;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
@@ -43,11 +42,11 @@ import hudson.slaves.AbstractCloudImpl;
 import hudson.slaves.Cloud;
 import hudson.slaves.NodeProvisioner;
 import hudson.util.ListBoxModel;
-import hudson.util.Secret;
+import io.jenkins.plugins.clever.api.AllApi;
 import io.jenkins.plugins.clever.api.Application;
-import io.jenkins.plugins.clever.api.ApplicationsApi;
 import io.jenkins.plugins.clever.api.Instance;
-import io.jenkins.plugins.clever.api.ProductsApi;
+import io.jenkins.plugins.clever.api.Organisation;
+import io.jenkins.plugins.clever.api.User;
 import io.jenkins.plugins.clever.api.WannabeApplication;
 import jenkins.model.Jenkins;
 import jenkins.model.JenkinsLocationConfiguration;
@@ -58,11 +57,11 @@ import org.jenkinsci.plugins.gitclient.Git;
 import org.jenkinsci.plugins.gitclient.GitClient;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import se.akerfeldt.okhttp.signpost.OkHttpOAuthConsumer;
 import se.akerfeldt.okhttp.signpost.SigningInterceptor;
 
+import javax.annotation.CheckForNull;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -83,61 +82,28 @@ import java.util.UUID;
 public class CleverCloud extends AbstractCloudImpl {
 
 
-    private Secret consumerKey;
-    private Secret consumerSecret;
+    private String credentialsId;
 
-    private final String token;
-
-    private final Secret secret;
-
-    private final String credentialsId;
+    private final String organisationId;
 
     private final List<AgentTemplate> templates;
 
     @DataBoundConstructor
-    public CleverCloud(String name, String token, Secret secret, String credentialsId, List<AgentTemplate> templates) {
+    public CleverCloud(String name, String credentialsId, String organisationId, List<AgentTemplate> templates) {
         super(name, "10");
-        this.token = token;
-        this.secret = secret;
         this.credentialsId = credentialsId;
-
+        this.organisationId = organisationId;
         this.templates = templates;
-    }
-
-    // if not set we use the same consumer key as clever CLI
-    // https://github.com/CleverCloud/clever-tools/blob/master/src/models/configuration.js
-    private static final Secret CLI_CONSUMER_KEY = Secret.fromString("T5nFjKeHH4AIlEveuGhB5S3xg8T19e");
-    public static final Secret CLI_CONSUMER_SECRET = Secret.fromString("MgVMqTr6fWlf2M0tkC2MXOnhfqBWDT");
-
-    public Secret getConsumerKey() {
-        return consumerKey != null ? consumerKey : CLI_CONSUMER_KEY;
-    }
-
-    @DataBoundSetter
-    public void setConsumerKey(Secret consumerKey) {
-        this.consumerKey = consumerKey;
-    }
-
-    public Secret getConsumerSecret() {
-        return consumerSecret != null ? consumerSecret : CLI_CONSUMER_SECRET;
-    }
-
-    @DataBoundSetter
-    public void setConsumerSecret(Secret consumerSecret) {
-        this.consumerSecret = consumerSecret;
-    }
-
-    public String getToken() {
-        return token;
-    }
-
-    public Secret getSecret() {
-        return secret;
     }
 
     public String getCredentialsId() {
         return credentialsId;
     }
+
+    public String getOrganisationId() {
+        return organisationId;
+    }
+
 
     public List<AgentTemplate> getTemplates() {
         return templates;
@@ -175,17 +141,12 @@ public class CleverCloud extends AbstractCloudImpl {
         return new ArrayList<NodeProvisioner.PlannedNode>(r);
     }
 
-    private static final String organisationId = "orga_3fab752b-3231-41b5-8b17-029e4689ba39";
-
-
-    // FIXME For development only
-    public Object readResolve() throws ApiException {
-        final ApiClient c = getApiClient();
-        final ApplicationsApi api = new ApplicationsApi(c);
-        for (Application application : api.getOrganisationsIdApplications(organisationId)) {
-            api.deleteOrganisationsIdApplicationsAppId(organisationId, application.getId());
-        }
-        return this;
+    @CheckForNull
+    private static CleverAPICredentials getAPICredentials(String credentialsId) {
+        return CredentialsMatchers.firstOrNull(
+                CredentialsProvider.lookupCredentials(CleverAPICredentials.class, Jenkins.getInstance(), ACL.SYSTEM, Collections.emptyList()),
+                CredentialsMatchers.withId(credentialsId)
+        );
     }
 
     /**
@@ -198,11 +159,10 @@ public class CleverCloud extends AbstractCloudImpl {
 
         final String agentName = UUID.randomUUID().toString();
 
-        final ApiClient c = getApiClient();
-        final ApplicationsApi api = new ApplicationsApi(c);
-        final ProductsApi products = new ProductsApi(c);
+        final ApiClient c = getApiClient(getAPICredentials(credentialsId));
+        final AllApi api = new AllApi(c);
 
-        final Optional<Instance> docker = products.getProductsInstances("").stream()
+        final Optional<Instance> docker = api.getProductsInstances("").stream()
                 .filter((it) -> it.isEnabled() && it.getType().equals("docker"))
                 .findFirst();
 
@@ -248,31 +208,27 @@ public class CleverCloud extends AbstractCloudImpl {
         return agent;
     }
 
-    public void terminate(CleverAgent agent) throws IOException {
-        final ApiClient c = getApiClient();
-        final ApplicationsApi api = new ApplicationsApi(c);
-        final String id = agent.getApplicationId();
-        try {
-            api.deleteOrganisationsIdApplicationsAppId(organisationId, id);
-        } catch (ApiException e) {
-            throw new IOException("Failed to delete Application "+id, e);
-        }
-    }
+    private static boolean debug = Boolean.getBoolean(CleverCloud.class.getName()+".debug");
 
-    private ApiClient getApiClient() {
+    static ApiClient getApiClient(CleverAPICredentials credentials) {
         final ApiClient c = new ApiClient();
-        OkHttpOAuthConsumer consumer = new OkHttpOAuthConsumer(getConsumerKey().getPlainText(), getConsumerSecret().getPlainText());
-        consumer.setTokenWithSecret(token, Secret.toString(secret));
-
         final List<Interceptor> interceptors = c.getHttpClient().interceptors();
-        interceptors.add(new SigningInterceptor(consumer));
-        final HttpLoggingInterceptor logging = new HttpLoggingInterceptor(new HttpLoggingInterceptor.Logger() {
-            @Override public void log(String message) {
-                System.out.println(message);
-            }
-        });
-        logging.setLevel(HttpLoggingInterceptor.Level.BODY);
-        interceptors.add(logging);
+        if (credentials != null) {
+            OkHttpOAuthConsumer consumer = new OkHttpOAuthConsumer(credentials.getConsumerKey().getPlainText(), credentials.getConsumerSecret().getPlainText());
+            consumer.setTokenWithSecret(credentials.getToken(), credentials.getSecret().getPlainText());
+            interceptors.add(new SigningInterceptor(consumer));
+        }
+
+        if (debug) {
+            final HttpLoggingInterceptor logging = new HttpLoggingInterceptor(new HttpLoggingInterceptor.Logger() {
+                @Override
+                public void log(String message) {
+                    System.out.println(message);
+                }
+            });
+            logging.setLevel(HttpLoggingInterceptor.Level.BODY);
+            interceptors.add(logging);
+        }
         return c;
     }
 
@@ -297,8 +253,8 @@ public class CleverCloud extends AbstractCloudImpl {
         git.add("Dockerfile");
         git.commit("Deploy jenkins agent on clever cloud");
 
-        final String remote = application.getDeployUrl();
-        git.addCredentials(remote, getGitSSHCredentials());
+        final String remote = application.getDeployment().getHttpUrl();
+        git.addCredentials(remote, getAPICredentials(credentialsId));
         git.push().to(new URIish(remote)).execute();
     }
 
@@ -315,14 +271,6 @@ public class CleverCloud extends AbstractCloudImpl {
         return null;
     }
 
-    private SSHUserPrivateKey getGitSSHCredentials() {
-        return CredentialsMatchers.firstOrNull(
-                CredentialsProvider.lookupCredentials(SSHUserPrivateKey.class, Jenkins.getInstance(), ACL.SYSTEM, Collections.emptyList()),
-                CredentialsMatchers.withId(credentialsId)
-        );
-    }
-
-
     @Extension
     public static class DescriptorImpl extends Descriptor<Cloud> {
 
@@ -338,14 +286,33 @@ public class CleverCloud extends AbstractCloudImpl {
                 return new StandardUsernameListBoxModel()
                         .includeCurrentValue(credentialsId);
             }
-            return new StandardUsernameListBoxModel()
-                    .includeMatchingAs(
-                            ACL.SYSTEM,
-                            context,
-                            SSHUserPrivateKey.class,
-                            Collections.emptyList(),
-                            CredentialsMatchers.always())
-                    .includeCurrentValue(credentialsId);
+            return new StandardUsernameListBoxModel().includeAs(ACL.SYSTEM, context, CleverAPICredentials.class);
+        }
+
+        public ListBoxModel doFillOrganisationIdItems(@QueryParameter("credentialsId") String credentialsId) {
+
+            if (credentialsId.length() == 0) {
+                // When form render, credentialsId is only set once doFillCredentialsIdItems populates the select box
+                // but doFillOrganisationIdItems has already be invoked in the meantime with empty string
+                final List<CleverAPICredentials> candidates =
+                    CredentialsProvider.lookupCredentials(CleverAPICredentials.class, Jenkins.getInstance(), ACL.SYSTEM, Collections.emptyList());
+                if (candidates.size() > 0) {
+                    credentialsId = candidates.get(0).getId();
+                }
+            }
+
+            final AllApi api = new AllApi(getApiClient(getAPICredentials(credentialsId)));
+            ListBoxModel model = new ListBoxModel();
+            try {
+                final User self = api.getSelf();
+                final List<Organisation> organisations = api.getOrganisations(self.getId()); // can't set null ?
+                for (Organisation me : organisations) {
+                    model.add(me.getName(), me.getId());
+                }
+            } catch (ApiException e) {
+                // TODO report auth error on web UI;
+            }
+            return model;
         }
     }
 }

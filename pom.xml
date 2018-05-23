@@ -110,6 +110,8 @@
                             <modelPackage>io.jenkins.plugins.clever.api</modelPackage>
                             <apiPackage>io.jenkins.plugins.clever.api</apiPackage>
                             <generateModels>true</generateModels>
+                            <generateApiTests>false</generateApiTests>
+                            <generateModelTests>false</generateModelTests>
                             <generateModelDocumentation>false</generateModelDocumentation>
                             <generateApis>true</generateApis>
                             <generateSupportingFiles>true</generateSupportingFiles>
