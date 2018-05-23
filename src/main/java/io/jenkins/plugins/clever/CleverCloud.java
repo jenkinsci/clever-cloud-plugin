@@ -58,6 +58,7 @@ import org.jenkinsci.plugins.gitclient.Git;
 import org.jenkinsci.plugins.gitclient.GitClient;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import se.akerfeldt.okhttp.signpost.OkHttpOAuthConsumer;
 import se.akerfeldt.okhttp.signpost.SigningInterceptor;
@@ -82,10 +83,8 @@ import java.util.UUID;
 public class CleverCloud extends AbstractCloudImpl {
 
 
-    // we use the same consumer key as clever CLI
-    // https://github.com/CleverCloud/clever-tools/blob/master/src/models/configuration.js
-    private final String CONSUMER_KEY = "T5nFjKeHH4AIlEveuGhB5S3xg8T19e";
-    private final String CONSUMER_SECRET = "MgVMqTr6fWlf2M0tkC2MXOnhfqBWDT";
+    private Secret consumerKey;
+    private Secret consumerSecret;
 
     private final String token;
 
@@ -105,6 +104,28 @@ public class CleverCloud extends AbstractCloudImpl {
         this.templates = templates;
     }
 
+    // if not set we use the same consumer key as clever CLI
+    // https://github.com/CleverCloud/clever-tools/blob/master/src/models/configuration.js
+    private static final Secret CLI_CONSUMER_KEY = Secret.fromString("T5nFjKeHH4AIlEveuGhB5S3xg8T19e");
+    public static final Secret CLI_CONSUMER_SECRET = Secret.fromString("MgVMqTr6fWlf2M0tkC2MXOnhfqBWDT");
+
+    public Secret getConsumerKey() {
+        return consumerKey != null ? consumerKey : CLI_CONSUMER_KEY;
+    }
+
+    @DataBoundSetter
+    public void setConsumerKey(Secret consumerKey) {
+        this.consumerKey = consumerKey;
+    }
+
+    public Secret getConsumerSecret() {
+        return consumerSecret != null ? consumerSecret : CLI_CONSUMER_SECRET;
+    }
+
+    @DataBoundSetter
+    public void setConsumerSecret(Secret consumerSecret) {
+        this.consumerSecret = consumerSecret;
+    }
 
     public String getToken() {
         return token;
@@ -240,7 +261,7 @@ public class CleverCloud extends AbstractCloudImpl {
 
     private ApiClient getApiClient() {
         final ApiClient c = new ApiClient();
-        OkHttpOAuthConsumer consumer = new OkHttpOAuthConsumer(CONSUMER_KEY, CONSUMER_SECRET);
+        OkHttpOAuthConsumer consumer = new OkHttpOAuthConsumer(getConsumerKey().getPlainText(), getConsumerSecret().getPlainText());
         consumer.setTokenWithSecret(token, Secret.toString(secret));
 
         final List<Interceptor> interceptors = c.getHttpClient().interceptors();
@@ -256,13 +277,17 @@ public class CleverCloud extends AbstractCloudImpl {
     }
 
 
-
+    /**
+     * Use clever API to emulate a remote <code>docker run</code> command.
+     * Which require to create a fake Dockerfile with a single <code>FROM</code> command, commit to a fake single-commit
+     * git repository and git-push to clever deploy API endpoint.
+     */
     private void dockerRun(Application application, String dockerImage) throws IOException, InterruptedException, URISyntaxException {
         final File tmp = Files.createTempDirectory("clever").toFile();
         final GitClient git = Git.with(TaskListener.NULL, new EnvVars(
-                "GIT_AUTHOR_NAME=jenkin",
+                "GIT_AUTHOR_NAME=jenkins",
                 "GIT_AUTHOR_EMAIL=jenkins@dev.null",
-                "GIT_COMMITTER_NAME=jenkin",
+                "GIT_COMMITTER_NAME=jenkins",
                 "GIT_COMMITTER_EMAIL=jenkins@dev.null"
         )).in(tmp).using("jgit").getClient();
         git.init();
