@@ -1,3 +1,5 @@
 Docker image used to provision a Jenkins Agent.
+
 You can publish your own dockerImage so required tools for your build are available during the build,
-just keep in mind this dockerImage <strong>must</strong> have Java installed so we can boot Jenkins agent runtime.
+just keep in mind this dockerImage <strong>must</strong> have Java installed and designed to launch a Jenkins agent.
+We strongly recommend to build your image on top of <a href="http://hub.docker.com/r/jenkins/jnlp-slave">jenkins/jnlp-slave</a>.
