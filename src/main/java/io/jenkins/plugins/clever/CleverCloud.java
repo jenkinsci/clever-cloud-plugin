@@ -208,6 +208,17 @@ public class CleverCloud extends AbstractCloudImpl {
         return agent;
     }
 
+    public void terminate(CleverAgent agent) throws IOException {
+        final ApiClient c = getApiClient(getAPICredentials(credentialsId));
+        final AllApi api = new AllApi(c);
+        final String id = agent.getApplicationId();
+        try {
+                api.deleteOrganisationsIdApplicationsAppId(organisationId, id);
+            } catch (ApiException e) {
+                throw new IOException("Failed to delete Application "+id, e);
+            }
+    }
+
     private static boolean debug = Boolean.getBoolean(CleverCloud.class.getName()+".debug");
 
     static ApiClient getApiClient(CleverAPICredentials credentials) {
