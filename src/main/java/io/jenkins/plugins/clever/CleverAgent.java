@@ -33,6 +33,7 @@ import hudson.slaves.Cloud;
 import hudson.slaves.EphemeralNode;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
+import io.jenkins.plugins.clever.api.ApplicationsApi;
 import jenkins.model.Jenkins;
 
 import java.io.IOException;
@@ -47,10 +48,12 @@ public class CleverAgent extends AbstractCloudSlave implements EphemeralNode {
 
     private final String cloud;
     private final String applicationId;
+    private final String organisationId;
 
-    public CleverAgent(String cloud, String name, String applicationId, String remoteFS, String labelString) throws Descriptor.FormException, IOException {
+    public CleverAgent(String cloud, String name, String organisationId, String applicationId, String remoteFS, String labelString) throws Descriptor.FormException, IOException {
         super(name, "jenkins agent on clever cloud", remoteFS, 1, Mode.EXCLUSIVE, labelString, new JNLPLauncher(), STRATEGY, Collections.emptyList());
         this.cloud = cloud;
+        this.organisationId = organisationId;
         this.applicationId = applicationId;
     }
 
@@ -67,8 +70,12 @@ public class CleverAgent extends AbstractCloudSlave implements EphemeralNode {
         return applicationId;
     }
 
+    public String getOrganisationId() {
+        return organisationId;
+    }
+
     @Override
-    public AbstractCloudComputer createComputer() {
+    public CleverComputer createComputer() {
         return new CleverComputer(this);
     }
 

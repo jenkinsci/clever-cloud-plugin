@@ -35,6 +35,7 @@ import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
 import hudson.model.Label;
+import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
@@ -44,6 +45,7 @@ import hudson.slaves.NodeProvisioner;
 import hudson.util.ListBoxModel;
 import io.jenkins.plugins.clever.api.AllApi;
 import io.jenkins.plugins.clever.api.Application;
+import io.jenkins.plugins.clever.api.Deployment;
 import io.jenkins.plugins.clever.api.Instance;
 import io.jenkins.plugins.clever.api.Organisation;
 import io.jenkins.plugins.clever.api.User;
@@ -73,7 +75,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  *
@@ -123,7 +127,11 @@ public class CleverCloud extends AbstractCloudImpl {
 
         final List<PlannedNode> r = new ArrayList<>();
 
-        for (int i = 0; i < excessWorkload; i++) {
+        Set<String> allInProvisioning = getAllInProvisioning(label);
+
+        int toBeProvisioned = Math.max(0, excessWorkload - allInProvisioning.size());
+
+        for (int i = 0; i < toBeProvisioned; i++) {
             r.add(new PlannedNode(label, template));
         }
 
@@ -139,6 +147,15 @@ public class CleverCloud extends AbstractCloudImpl {
         }
 
         return new ArrayList<NodeProvisioner.PlannedNode>(r);
+    }
+
+    private Set<String> getAllInProvisioning(Label label) {
+
+        return label.getNodes().stream()
+                .filter(CleverAgent.class::isInstance)
+                .filter(a -> a.toComputer().isOffline()) // still provisioning
+                .map(Node::getNodeName)
+                .collect(Collectors.toSet());
     }
 
     @CheckForNull
@@ -184,7 +201,7 @@ public class CleverCloud extends AbstractCloudImpl {
         app.setDeploy("git"); // TODO waiting for a binary deploy API so we can just deploy 'jenkins/jnlp-slave' without a fake Dockerfile"
 
         Application application = api.postOrganisationsIdApplications(organisationId, app);
-        final CleverAgent agent = new CleverAgent(this.name, agentName, application.getId(), "/home/jenkins", label.toString());
+        final CleverAgent agent = new CleverAgent(this.name, agentName, organisationId, application.getId(), "/home/jenkins", label.toString());
 
         // Register agent so it becomes a valid JNLP target
         Jenkins.getInstance().addNode(agent);
@@ -204,6 +221,9 @@ public class CleverCloud extends AbstractCloudImpl {
             api.deleteOrganisationsIdApplicationsAppId(organisationId, application.getId());
             throw e;
         }
+
+        // TODO track the deployment status
+        // final Deployment deployment = api.getOrganisationsIdApplicationsAppIdDeployments(organisationId, application.getId(), null, null, null).get(0);
 
         return agent;
     }
@@ -326,4 +346,17 @@ public class CleverCloud extends AbstractCloudImpl {
             return model;
         }
     }
+
+    // Cleanup code used during development as we get dozen apps created
+    // And unfortunately no simple way to prune them using CLI
+    /*
+    public Object readResolve() throws ApiException {
+        final ApiClient c = getApiClient(getAPICredentials(credentialsId));
+        final AllApi api = new AllApi(c);
+        for (Application application : api.getOrganisationsIdApplications(organisationId)) {
+            api.deleteOrganisationsIdApplicationsAppId(organisationId, application.getId());
+        }
+        return this;
+    }
+    */
 }

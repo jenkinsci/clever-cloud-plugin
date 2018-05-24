@@ -22,16 +22,12 @@ public class CleverComputer extends AbstractCloudComputer<CleverAgent> {
         this.agent = agent;
     }
 
-    public String getApplicationId() {
-        return agent.getApplicationId();
-    }
-
     @CheckForNull
     @Override
     public CleverAgent getNode() {
         return agent;
     }
-    
+
     @Override
     protected void onRemoved() {
         threadPoolForRemoting.submit(() -> {
