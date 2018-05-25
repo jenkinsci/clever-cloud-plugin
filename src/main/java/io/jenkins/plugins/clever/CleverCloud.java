@@ -37,6 +37,7 @@ import hudson.model.ItemGroup;
 import hudson.model.Label;
 import hudson.model.Node;
 import hudson.model.TaskListener;
+import hudson.plugins.git.GitException;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
 import hudson.slaves.AbstractCloudImpl;
@@ -216,7 +217,7 @@ public class CleverCloud extends AbstractCloudImpl {
             api.putOrganisationsIdApplicationsAppIdEnv(organisationId, application.getId(), env);
 
             dockerRun(application, template.getDockerImage());
-        } catch (IOException e) {
+        } catch (Exception e) {
             // Something went wrong, ensure we remove clever-cloud application
             api.deleteOrganisationsIdApplicationsAppId(organisationId, application.getId());
             throw e;
@@ -285,8 +286,18 @@ public class CleverCloud extends AbstractCloudImpl {
         git.commit("Deploy jenkins agent on clever cloud");
 
         final String remote = application.getDeployment().getHttpUrl();
-        git.addCredentials(remote, getAPICredentials(credentialsId));
-        git.push().to(new URIish(remote)).execute();
+        git.addDefaultCredentials(getAPICredentials(credentialsId));
+
+        int maxTries = 5;
+        while(true) {
+            try {
+                git.push().to(new URIish(remote)).execute();
+                return;
+            } catch (GitException e) {
+                if (--maxTries < 0) throw e;
+                Thread.sleep(500);
+            }
+        }
     }
 
     @Override
