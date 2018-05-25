@@ -10,6 +10,7 @@ import hudson.slaves.ComputerListener;
 import jenkins.security.MasterToSlaveCallable;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.InetSocketAddress;
 
 /**
@@ -24,14 +25,18 @@ public class AgentListener extends ComputerListener {
     @Override
     public void preOnline(Computer c, Channel channel, FilePath root, TaskListener listener) throws IOException, InterruptedException {
 
-        channel.call(new MasterToSlaveCallable<Object, IOException>() {
+        channel.call(new Http8080Server());
+    }
 
-            @Override
-            public Object call() throws IOException {
-                final HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", 8080), 1);
-                server.start();
-                return null;
-            }
-        });
+    private static final class Http8080Server extends MasterToSlaveCallable<Object, IOException> implements Serializable {
+
+        static final long serialVersionUID = 1L;
+
+        @Override
+        public Object call() throws IOException {
+            final HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", 8080), 1);
+            server.start();
+            return null;
+        }
     }
 }
