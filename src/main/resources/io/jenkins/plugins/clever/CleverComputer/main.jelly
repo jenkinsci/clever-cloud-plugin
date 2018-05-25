@@ -24,7 +24,7 @@ THE SOFTWARE.
 
   <h2>Clever Cloud computer</h2>
   <p>
-    <a href="https://console.clever-cloud.com/organisations/${it.node.organisationId}/applications/${it.node.applicationId}">${it.node.applicationId}</a>
+    <a href="https://console.clever-cloud.com/organisations/${it.node.organisationId}/applications/${it.node.applicationId}//logs" target="_blank">${it.node.applicationId}</a>
 
     <!-- TODO offer more live info about the application, health, deploy log, etc ... -->
   </p>
